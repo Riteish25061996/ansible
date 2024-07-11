@@ -1,0 +1,79 @@
+---
+- hosts: devlinux
+  user: velocity
+  become: yes
+  gather_facts: yes
+  vars:
+    git_repo: "https://github.com/Shantanumajan6/game-of-life.git"
+    tomcat_url: "https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.91/bin/apache-tomcat-9.0.91.zip"
+    tomcat_dest_dir: "/mnt/build-tools"
+    tomcat_zip: "apache-tomcat-9.0.91.zip"
+    git_repo_dest: "/mnt/git-project"
+    tomcat_home: "{{ tomcat_dest_dir }}/apache-tomcat-9.0.91"
+    tomcat_bin: "{{ tomcat_home }}/bin"
+  tasks:
+    - name: installing java
+      yum:
+        name: java-1.8.0-openjdk-devel.x86_64
+        state: present
+
+    - name: installing git
+      yum:
+        name: git
+        state: present
+
+    - name: Ensure the tomcat directory exists
+      file:
+        path: "{{ tomcat_dest_dir }}"
+        state: directory
+        mode: '0777'
+
+    - name: Ensure GIT directory exist
+      file:   
+        path: "{{ git_repo_dest }}"
+        state: directory
+        mode: '0777'
+
+    - name: downloading tomcat
+      get_url:
+        url: "{{ tomcat_url }}"
+        dest: "{{ tomcat_dest_dir }}"
+
+    - name: Unzip Tomcat file
+      unarchive:
+        src: "{{ tomcat_dest_dir }}/{{ tomcat_zip }}"
+        dest: "{{ tomcat_dest_dir }}"
+        remote_src: yes
+
+    - name: downloading maven
+      yum:
+        name: maven
+        state: present
+
+    - name: cloning the git repo
+      git:
+        repo: "{{ git_repo }}"
+        dest: "{{ git_repo_dest }}"
+
+    - name: Build the project using Maven
+      command: mvn clean install
+      args:
+        chdir: "{{ git_repo_dest }}"
+
+    - name: Copy the WAR file to Tomcat webapps
+      copy:
+        src: "{{ git_repo_dest }}/gameoflife-web/target/gameoflife.war"
+        dest: "{{ tomcat_dest_dir }}/apache-tomcat-9.0.91/webapps/"
+        remote_src: yes
+
+    - name: Ensure Tomcat directory is executable
+      file:
+        path: "{{ tomcat_home }}"
+        mode: '0777'
+        recurse: yes
+        state: directory
+
+    - name: Start Tomcat server
+      command: "{{ tomcat_bin }}/startup.sh"
+      args:
+        chdir: "{{ tomcat_bin }}"
